@@ -4,7 +4,7 @@ import os
 from api_client import fetch_daily_data, generate_plausible_guesses
 from game_player import play_pinpoint
 from video_producer import process_video
-from uploader import upload_video
+from uploader import upload_video, build_video_metadata
 
 def main():
     parser = argparse.ArgumentParser(description="LinkedIn Pinpoint Automation")
@@ -23,11 +23,11 @@ def main():
     print(f"Target Answer: {data['answer']}")
     print(f"Clues: {data['clues']}")
 
-    # 2. Enhance Data (Gemini Guesses)
-    print("\n--- Step 2: Generating Plausible Guesses (Gemini) ---")
+    # 2. Build a human-like wrong-guess path
+    print("\n--- Step 2: Building Human-like Guess Path ---")
     guesses = generate_plausible_guesses(data['clues'], data['answer'])
     data['plausible_guesses'] = guesses
-    print(f"Generated Guesses: {guesses}")
+    print(f"Planned Wrong Guesses: {guesses}")
 
     # 3. Play & Record
     print("\n--- Step 3: Playing & Recording ---")
@@ -48,11 +48,16 @@ def main():
 
     # 5. Upload
     print("\n--- Step 5: Uploading ---")
+    metadata = build_video_metadata(data)
     if args.dry_run:
         print("Dry run enabled. Skipping upload.")
+        print(f"SEO Title: {metadata['title']}")
+        print(f"SEO Tags: {metadata['tags']}")
+        print("SEO Description Preview:")
+        print(metadata['description'])
         print(f"Final video saved to: {final_video}")
     else:
-        upload_success = upload_video(final_video, data)
+        upload_success = upload_video(final_video, data, metadata=metadata)
         if not upload_success:
             sys.exit(1)
 

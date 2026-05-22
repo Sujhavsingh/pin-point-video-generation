@@ -1,20 +1,68 @@
 import time
 import random
-import asyncio
-from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright, Page
 
 GAME_URL = "https://www.linkedin.com/games/view/pinpoint/desktop/"
 
-def human_type(page: Page, selector: str, text: str):
+def human_type(page: Page, selector: str, text: str, allow_typo=False):
     """Types text with random delays between keystrokes."""
     page.focus(selector)
-    for char in text:
+    typo_index = -1
+    if allow_typo and len(text) > 4 and random.random() < 0.35:
+        typo_index = random.randint(1, len(text) - 2)
+
+    for index, char in enumerate(text):
+        if index == typo_index and char.isalpha():
+            wrong_char = random.choice("abcdefghijklmnopqrstuvwxyz")
+            if wrong_char == char.lower():
+                wrong_char = "e"
+            page.keyboard.type(wrong_char)
+            time.sleep(random.uniform(0.04, 0.09))
+            page.keyboard.press("Backspace")
+            time.sleep(random.uniform(0.05, 0.12))
+
         page.keyboard.type(char)
-        time.sleep(random.uniform(0.05, 0.15)) # Random delay 50ms - 150ms
+        if char == " ":
+            time.sleep(random.uniform(0.08, 0.18))
+        else:
+            time.sleep(random.uniform(0.05, 0.16))
 
 def human_delay(min_seconds=2, max_seconds=5):
     """Random pause to simulate thinking."""
     time.sleep(random.uniform(min_seconds, max_seconds))
+
+def study_visible_clues(page: Page):
+    """Hovers over visible clue cards with short pauses to mimic reading."""
+    clue_cards = page.locator(".pinpoint__card--clue")
+
+    try:
+        count = min(clue_cards.count(), 5)
+    except Exception:
+        return
+
+    for index in range(count):
+        card = clue_cards.nth(index)
+        try:
+            if not card.is_visible():
+                continue
+            box = card.bounding_box()
+            if box:
+                x = box["x"] + (box["width"] * random.uniform(0.25, 0.75))
+                y = box["y"] + (box["height"] * random.uniform(0.3, 0.7))
+                page.mouse.move(x, y, steps=random.randint(8, 18))
+            card.hover()
+            time.sleep(random.uniform(0.25, 0.8))
+        except Exception:
+            continue
+
+
+def clear_input(page: Page, selector: str):
+    page.click(selector)
+    page.keyboard.press("Control+A")
+    time.sleep(random.uniform(0.05, 0.12))
+    page.keyboard.press("Backspace")
+    time.sleep(random.uniform(0.08, 0.18))
+
 
 def play_pinpoint(data, output_video_path):
     """
@@ -63,7 +111,7 @@ def play_pinpoint(data, output_video_path):
         
         try:
             print(f"Navigating to {GAME_URL}...")
-            page.goto(GAME_URL)
+            page.goto(GAME_URL, wait_until="domcontentloaded")
             human_delay(3, 5)
 
             # Specific Start Button Selector provided by user
@@ -94,18 +142,13 @@ def play_pinpoint(data, output_video_path):
                 print(f"Typing plausible guess {i+1}: {guess}")
                 try:
                     page.wait_for_selector(input_selector, state="visible", timeout=10000)
-                    
-                    # Ensure focus
-                    page.click(input_selector)
-                    
-                    human_type(page, input_selector, guess)
-                    human_delay(0.5, 1)
+                    study_visible_clues(page)
+                    human_delay(1.5, 3.5)
+                    clear_input(page, input_selector)
+                    human_type(page, input_selector, guess, allow_typo=True)
+                    human_delay(0.7, 1.8)
                     page.keyboard.press("Enter")
-                    
-                    # Wait for next clue to appear or animation
-                    # Logic: In Pinpoint, a wrong guess reveals a new clue
-                    human_delay(3, 5) 
-                    
+                    human_delay(3, 5)
                 except Exception as e:
                     print(f"Could not enter guess '{guess}': {e}")
             
@@ -113,11 +156,10 @@ def play_pinpoint(data, output_video_path):
             print(f"Typing correct answer: {answer}")
             try:
                 page.wait_for_selector(input_selector, state="visible", timeout=10000)
-                
-                # Clear input if needed (usually entering a wrong guess clears it, but just in case)
-                page.locator(input_selector).fill("") 
-                
-                human_type(page, input_selector, answer)
+                study_visible_clues(page)
+                human_delay(2.5, 4.5)
+                clear_input(page, input_selector)
+                human_type(page, input_selector, answer, allow_typo=False)
                 human_delay(0.5, 1.5)
                 page.keyboard.press("Enter")
                 
