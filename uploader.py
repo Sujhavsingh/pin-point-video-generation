@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 PRIMARY_GAME_URL = "https://www.linkedin.com/games/view/pinpoint/desktop/"
+YOUTUBE_TAG_LIMIT = 500
 MISSPELLING_KEYWORDS = (
     "linkedin poinpoint answer today",
     "poinpoint answer today",
@@ -56,6 +57,24 @@ def _extract_puzzle_number(data):
 
 def _clean_text(value):
     return " ".join(str(value or "").split())
+
+
+def _clean_tag(value):
+    cleaned = _clean_text(value).replace("<", "").replace(">", "")
+    return cleaned[:100].strip('\'"')
+
+
+def _youtube_tag_length(tag):
+    length = len(tag)
+    if " " in tag:
+        length += 2
+    return length
+
+
+def _youtube_tags_total_length(tags):
+    if not tags:
+        return 0
+    return sum(_youtube_tag_length(tag) for tag in tags) + (len(tags) - 1)
 
 
 def _build_title(formatted_date, puzzle_number):
@@ -124,23 +143,19 @@ def _build_tags(formatted_date, iso_date, answer, puzzle_number):
 
     tags = []
     seen = set()
-    total_chars = 0
 
     for tag in raw_tags:
-        cleaned = _clean_text(tag)
+        cleaned = _clean_tag(tag)
         lowered = cleaned.lower()
         if not cleaned or lowered in seen:
             continue
 
-        projected_total = total_chars + len(cleaned)
-        if tags:
-            projected_total += 1
-        if projected_total > 480:
+        projected_total = _youtube_tags_total_length(tags + [cleaned])
+        if projected_total > YOUTUBE_TAG_LIMIT:
             continue
 
         tags.append(cleaned)
         seen.add(lowered)
-        total_chars = projected_total
 
     return tags
 
